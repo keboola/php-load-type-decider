@@ -6,7 +6,7 @@ namespace Keboola\Package\LoadTypeDecider;
 
 use Keboola\Package\LoadTypeDecider\Exception\InvalidInputException;
 
-class LoadTypeDecider
+final class LoadTypeDecider
 {
     private const CLONE_SUPPORTED_BACKENDS = ['snowflake', 'bigquery'];
 

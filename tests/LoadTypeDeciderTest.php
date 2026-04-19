@@ -7,10 +7,12 @@ namespace Keboola\Package\LoadTypeDecider\Tests;
 use Generator;
 use Keboola\Package\LoadTypeDecider\Exception\InvalidInputException;
 use Keboola\Package\LoadTypeDecider\LoadTypeDecider;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-class LoadTypeDeciderTest extends TestCase
+#[CoversClass(LoadTypeDecider::class)]
+final class LoadTypeDeciderTest extends TestCase
 {
     /**
      * @param array<string, mixed> $tableInfo

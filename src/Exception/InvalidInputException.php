@@ -16,6 +16,6 @@ use RuntimeException;
  * must translate user-facing errors into their own domain exceptions before
  * reaching this decider.
  */
-class InvalidInputException extends RuntimeException implements ApplicationExceptionInterface
+final class InvalidInputException extends RuntimeException implements ApplicationExceptionInterface
 {
 }
