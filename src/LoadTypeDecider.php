@@ -19,7 +19,7 @@ class LoadTypeDecider
     ): void {
         if ($workspaceType !== 'bigquery' || $tableInfo['bucket']['backend'] !== 'bigquery') {
             throw new InvalidInputException(sprintf(
-                'Workspace type "%s" does not match table backend type "%s" when loading Bigquery table "%s".',
+                'Workspace type "%s" does not match table backend type "%s" when loading BigQuery table "%s".',
                 $workspaceType,
                 $tableInfo['bucket']['backend'],
                 $tableInfo['id'],
