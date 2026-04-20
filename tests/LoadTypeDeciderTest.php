@@ -37,7 +37,7 @@ final class LoadTypeDeciderTest extends TestCase
             [
                 'id' => 'foo.bar',
                 'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
+                'bucket' => ['backend' => 'redshift'],
                 'isAlias' => false,
             ],
             'snowflake',
@@ -51,7 +51,7 @@ final class LoadTypeDeciderTest extends TestCase
                 'bucket' => ['backend' => 'snowflake'],
                 'isAlias' => false,
             ],
-            'bigquery',
+            'redshift',
             [],
             false,
         ];
@@ -79,61 +79,25 @@ final class LoadTypeDeciderTest extends TestCase
             ['overwrite' => false],
             true,
         ];
-        yield 'cloneable bigquery' => [
+        yield 'redshift' => [
             [
                 'id' => 'foo.bar',
                 'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
+                'bucket' => ['backend' => 'redshift'],
                 'isAlias' => false,
             ],
-            'bigquery',
-            ['overwrite' => false],
-            true,
-        ];
-        yield 'bigquery filtered' => [
-            [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => false,
-            ],
-            'bigquery',
-            [
-                'changed_since' => '-2 days',
-            ],
+            'redshift',
+            [],
             false,
         ];
-        yield 'bigquery external bucket' => [
-            [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery', 'hasExternalSchema' => true],
-                'isAlias' => false,
-            ],
-            'bigquery',
-            ['overwrite' => false],
-            false,
-        ];
-        yield 'bigquery alias table' => [
+        yield 'bigquery not cloneable' => [
             [
                 'id' => 'foo.bar',
                 'name' => 'bar',
                 'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => true,
-                'aliasColumnsAutoSync' => true,
-            ],
-            'bigquery',
-            ['overwrite' => false],
-            true,
-        ];
-        yield 'unsupported backend' => [
-            [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'synapse'],
                 'isAlias' => false,
             ],
-            'synapse',
+            'bigquery',
             ['overwrite' => false],
             false,
         ];
@@ -193,30 +157,18 @@ final class LoadTypeDeciderTest extends TestCase
 
     /**
      * @param array<string, mixed> $tableInfo
-     * @param array<string, mixed> $exportOptions
      */
     #[DataProvider('decideCanUseViewProvider')]
     public function testDecideCanUseView(
         array $tableInfo,
         string $workspaceType,
-        array $exportOptions,
-        string $currentProjectId,
         bool $expected,
     ): void {
-        self::assertEquals(
-            $expected,
-            LoadTypeDecider::canUseView($tableInfo, $workspaceType, $exportOptions, $currentProjectId),
-        );
+        self::assertEquals($expected, LoadTypeDecider::canUseView($tableInfo, $workspaceType));
     }
 
     /**
-     * @return Generator<string, array{
-     *     tableInfo: array<string, mixed>,
-     *     workspaceType: string,
-     *     exportOptions: array<string, mixed>,
-     *     currentProjectId: string,
-     *     expected: bool,
-     * }>
+     * @return Generator<string, array{tableInfo: array<string, mixed>, workspaceType: string, expected: bool}>
      */
     public static function decideCanUseViewProvider(): Generator
     {
@@ -228,25 +180,10 @@ final class LoadTypeDeciderTest extends TestCase
                 'isAlias' => false,
             ],
             'workspaceType' => 'bigquery',
-            'exportOptions' => [],
-            'currentProjectId' => '123',
             'expected' => true,
         ];
 
-        yield 'BigQuery Table with overwrite option' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'bigquery',
-            'exportOptions' => ['overwrite' => true],
-            'currentProjectId' => '123',
-            'expected' => true,
-        ];
-
-        yield 'BigQuery Shared Table from different project' => [
+        yield 'BigQuery Shared Table' => [
             'tableInfo' => [
                 'id' => 'foo.bar',
                 'name' => 'bar',
@@ -255,26 +192,10 @@ final class LoadTypeDeciderTest extends TestCase
                 'sourceTable' => ['project' => ['id' => '321']],
             ],
             'workspaceType' => 'bigquery',
-            'exportOptions' => [],
-            'currentProjectId' => '123',
             'expected' => true,
         ];
 
-        yield 'BigQuery Alias in current project' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => true,
-                'sourceTable' => ['project' => ['id' => '123']],
-            ],
-            'workspaceType' => 'bigquery',
-            'exportOptions' => [],
-            'currentProjectId' => '123',
-            'expected' => false,
-        ];
-
-        yield 'BigQuery Table with filter options' => [
+        yield 'BigQuery Table Overwrite' => [
             'tableInfo' => [
                 'id' => 'foo.bar',
                 'name' => 'bar',
@@ -282,38 +203,10 @@ final class LoadTypeDeciderTest extends TestCase
                 'isAlias' => false,
             ],
             'workspaceType' => 'bigquery',
-            'exportOptions' => ['seconds' => 5],
-            'currentProjectId' => '123',
-            'expected' => false,
+            'expected' => true,
         ];
 
-        yield 'BigQuery Table with rows limit' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'bigquery',
-            'exportOptions' => ['rows' => 1],
-            'currentProjectId' => '123',
-            'expected' => false,
-        ];
-
-        yield 'BigQuery Table with columns filter' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'bigquery',
-            'exportOptions' => ['columns' => ['col1']],
-            'currentProjectId' => '123',
-            'expected' => false,
-        ];
-
-        yield 'Table Different Backend' => [
+        yield 'Table Overwrite Different Backend' => [
             'tableInfo' => [
                 'id' => 'foo.bar',
                 'name' => 'bar',
@@ -321,8 +214,6 @@ final class LoadTypeDeciderTest extends TestCase
                 'isAlias' => false,
             ],
             'workspaceType' => 'snowflake',
-            'exportOptions' => [],
-            'currentProjectId' => '123',
             'expected' => false,
         ];
 
@@ -334,35 +225,7 @@ final class LoadTypeDeciderTest extends TestCase
                 'isAlias' => false,
             ],
             'workspaceType' => 'snowflake',
-            'exportOptions' => [],
-            'currentProjectId' => '123',
             'expected' => true,
-        ];
-
-        yield 'Snowflake external bucket with overwrite' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'snowflake', 'hasExternalSchema' => true],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'snowflake',
-            'exportOptions' => ['overwrite' => true],
-            'currentProjectId' => '123',
-            'expected' => true,
-        ];
-
-        yield 'Snowflake external bucket with filter options' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'snowflake', 'hasExternalSchema' => true],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'snowflake',
-            'exportOptions' => ['seconds' => 5],
-            'currentProjectId' => '123',
-            'expected' => false,
         ];
 
         yield 'Snowflake normal bucket' => [
@@ -373,96 +236,37 @@ final class LoadTypeDeciderTest extends TestCase
                 'isAlias' => false,
             ],
             'workspaceType' => 'snowflake',
-            'exportOptions' => [],
-            'currentProjectId' => '123',
             'expected' => false,
         ];
     }
 
     /**
      * @param array<string, mixed> $tableInfo
+     * @param array<string, mixed> $exportOptions
      */
-    #[DataProvider('checkViableBigQueryLoadMethodExceptionProvider')]
-    public function testCheckViableBigQueryLoadMethodException(
+    #[DataProvider('checkViableLoadMethodExceptionProvider')]
+    public function testCheckViableLoadMethodException(
         array $tableInfo,
         string $workspaceType,
+        array $exportOptions,
         string $expected,
     ): void {
         $this->expectException(InvalidInputException::class);
         $this->expectExceptionMessage($expected);
-        LoadTypeDecider::checkViableBigQueryLoadMethod(
-            $tableInfo,
-            $workspaceType,
-        );
+        LoadTypeDecider::checkViableLoadMethod($tableInfo, $workspaceType, $exportOptions, '123');
     }
 
     /**
      * @return Generator<string, array{
      *     tableInfo: array<string, mixed>,
      *     workspaceType: string,
+     *     exportOptions: array<string, mixed>,
      *     expected: string,
      * }>
      */
-    public static function checkViableBigQueryLoadMethodExceptionProvider(): Generator
+    public static function checkViableLoadMethodExceptionProvider(): Generator
     {
-        yield 'Snowflake Table to bigquery workspace' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'snowflake'],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'bigquery',
-            // phpcs:ignore Generic.Files.LineLength.MaxExceeded
-            'expected' => 'Workspace type "bigquery" does not match table backend type "snowflake" when loading BigQuery table "foo.bar".',
-        ];
-        yield 'BigQuery Table to snowflake workspace' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'snowflake',
-            // phpcs:ignore Generic.Files.LineLength.MaxExceeded
-            'expected' => 'Workspace type "snowflake" does not match table backend type "bigquery" when loading BigQuery table "foo.bar".',
-        ];
-    }
-
-    /**
-     * @param array<string, mixed> $tableInfo
-     */
-    #[DataProvider('checkViableBigQueryLoadMethodPassProvider')]
-    public function testCheckViableBigQueryLoadMethodPass(
-        array $tableInfo,
-        string $workspaceType,
-    ): void {
-        $this->expectNotToPerformAssertions();
-        LoadTypeDecider::checkViableBigQueryLoadMethod(
-            $tableInfo,
-            $workspaceType,
-        );
-    }
-
-    /**
-     * @return Generator<string, array{
-     *     tableInfo: array<string, mixed>,
-     *     workspaceType: string,
-     * }>
-     */
-    public static function checkViableBigQueryLoadMethodPassProvider(): Generator
-    {
-        yield 'BigQuery Table' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'bigquery',
-        ];
-
-        yield 'BigQuery Alias Table' => [
+        yield 'BigQuery Table Alias' => [
             'tableInfo' => [
                 'id' => 'foo.bar',
                 'name' => 'bar',
@@ -471,6 +275,168 @@ final class LoadTypeDeciderTest extends TestCase
                 'sourceTable' => ['project' => ['id' => '123']],
             ],
             'workspaceType' => 'bigquery',
+            'exportOptions' => [],
+            'expected' => 'Table "foo.bar" is an alias, which is not supported when loading Bigquery tables.',
+        ];
+
+        yield 'Filtered BigQuery Table' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'seconds' => 5,
+            ],
+            'expected' => 'Option "seconds" is not supported when loading Bigquery table "foo.bar".',
+        ];
+
+        yield 'BigQuery Table with limit' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'rows' => 1,
+            ],
+            'expected' => 'Option "rows" is not supported when loading Bigquery table "foo.bar".',
+        ];
+
+        yield 'BigQuery Table with whereOperator' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'whereOperator' => 'and',
+            ],
+            'expected' => 'Option "whereOperator" is not supported when loading Bigquery table "foo.bar".',
+        ];
+
+        yield 'BigQuery Table with whereColumn' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'whereColumn' => 'name',
+            ],
+            'expected' => 'Option "whereColumn" is not supported when loading Bigquery table "foo.bar".',
+        ];
+
+        yield 'BigQuery Table with whereValues' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'whereValues' => ['foo'],
+            ],
+            'expected' => 'Option "whereValues" is not supported when loading Bigquery table "foo.bar".',
+        ];
+
+        yield 'BigQuery Table with columns' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'columns' => [],
+            ],
+            'expected' => 'Option "columns" is not supported when loading Bigquery table "foo.bar".',
+        ];
+
+        yield 'Snowflake Table to bigquery workspace' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'snowflake'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'columns' => [],
+            ],
+            'expected' => 'Workspace type "bigquery" does not match table backend type "snowflake" when loading Bigquery table "foo.bar".',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $tableInfo
+     * @param array<string, mixed> $exportOptions
+     */
+    #[DataProvider('checkViableLoadMethodPassProvider')]
+    public function testCheckViableLoadMethodPass(
+        array $tableInfo,
+        string $workspaceType,
+        array $exportOptions,
+    ): void {
+        $this->expectNotToPerformAssertions();
+        LoadTypeDecider::checkViableLoadMethod($tableInfo, $workspaceType, $exportOptions, '123');
+    }
+
+    /**
+     * @return Generator<string, array{
+     *     tableInfo: array<string, mixed>,
+     *     workspaceType: string,
+     *     exportOptions: array<string, mixed>,
+     * }>
+     */
+    public static function checkViableLoadMethodPassProvider(): Generator
+    {
+        yield 'BigQuery Table Alias' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+                'sourceTable' => ['project' => ['id' => '123']],
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [],
+        ];
+
+        yield 'Filtered BigQuery Table' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'overwrite' => true,
+            ],
+        ];
+
+        yield 'Snowflake workspace' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'snowflake',
+            'exportOptions' => [
+                'columns' => [],
+            ],
         ];
     }
 }

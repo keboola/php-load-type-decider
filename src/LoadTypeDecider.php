@@ -8,22 +8,50 @@ use Keboola\Package\LoadTypeDecider\Exception\InvalidInputException;
 
 final class LoadTypeDecider
 {
-    private const CLONE_SUPPORTED_BACKENDS = ['snowflake', 'bigquery'];
-
     /**
      * @param array<string, mixed> $tableInfo
+     * @param array<string, mixed> $exportOptions
      */
-    public static function checkViableBigQueryLoadMethod(
+    public static function checkViableLoadMethod(
         array $tableInfo,
         string $workspaceType,
+        array $exportOptions,
+        string $currentProjectId,
     ): void {
-        if ($workspaceType !== 'bigquery' || $tableInfo['bucket']['backend'] !== 'bigquery') {
-            throw new InvalidInputException(sprintf(
-                'Workspace type "%s" does not match table backend type "%s" when loading BigQuery table "%s".',
-                $workspaceType,
-                $tableInfo['bucket']['backend'],
-                $tableInfo['id'],
-            ));
+        $isWorkspaceBigQuery = $workspaceType === 'bigquery';
+        $isBackendMismatch = $tableInfo['bucket']['backend'] !== $workspaceType;
+        $hasOtherThanOverwriteOptions = $exportOptions && array_keys($exportOptions) !== ['overwrite'];
+        $isAliasInCurrentProject = $tableInfo['isAlias'] &&
+            ((string) $tableInfo['sourceTable']['project']['id'] === $currentProjectId);
+
+        if ($isWorkspaceBigQuery) {
+            if ($isBackendMismatch) {
+                throw new InvalidInputException(sprintf(
+                    'Workspace type "%s" does not match table backend type "%s" when loading Bigquery table "%s".',
+                    $workspaceType,
+                    $tableInfo['bucket']['backend'],
+                    $tableInfo['id'],
+                ));
+            }
+
+            if ($hasOtherThanOverwriteOptions) {
+                throw new InvalidInputException(sprintf(
+                    'Option "%s" is not supported when loading Bigquery table "%s".',
+                    implode(', ', array_keys($exportOptions)),
+                    $tableInfo['id'],
+                ));
+            }
+
+            /* isAlias means that the table is EITHER an alias OR a table shared from a different project.
+                Surprisingly, the table shared from different project IS supported, but the alias is not.
+                https://keboolaglobal.slack.com/archives/C055HSMKX51/p1699434828910109
+            */
+            if ($isAliasInCurrentProject) {
+                throw new InvalidInputException(sprintf(
+                    'Table "%s" is an alias, which is not supported when loading Bigquery tables.',
+                    $tableInfo['id'],
+                ));
+            }
         }
     }
 
@@ -39,7 +67,7 @@ final class LoadTypeDecider
 
         if (array_keys($exportOptions) !== ['overwrite'] ||
             ($tableInfo['bucket']['backend'] !== $workspaceType) ||
-            !in_array($workspaceType, self::CLONE_SUPPORTED_BACKENDS, true)
+            ($workspaceType !== 'snowflake')
         ) {
             return false;
         }
@@ -47,6 +75,7 @@ final class LoadTypeDecider
         if (array_key_exists('hasExternalSchema', $tableInfo['bucket'])
             && $tableInfo['bucket']['hasExternalSchema'] === true
         ) {
+            // clone is not allowed for buckets with external schema
             return false;
         }
         return true;
@@ -54,40 +83,26 @@ final class LoadTypeDecider
 
     /**
      * @param array<string, mixed> $tableInfo
-     * @param array<string, mixed> $exportOptions
      */
     public static function canUseView(
         array $tableInfo,
         string $workspaceType,
-        array $exportOptions,
-        string $currentProjectId,
     ): bool {
         $backend = $tableInfo['bucket']['backend'];
         $isBackendMatch = $backend === $workspaceType;
-
-        if (!$isBackendMatch) {
-            return false;
+        if ($isBackendMatch && $workspaceType === 'bigquery') {
+            return true;
         }
 
-        if ($workspaceType !== 'bigquery'
-            && !($backend === 'snowflake'
-                && array_key_exists('hasExternalSchema', $tableInfo['bucket'])
-                && $tableInfo['bucket']['hasExternalSchema'] === true)
+        if ($isBackendMatch
+            && $backend === 'snowflake'
+            && array_key_exists('hasExternalSchema', $tableInfo['bucket'])
+            && $tableInfo['bucket']['hasExternalSchema'] === true
         ) {
-            return false;
+            // allow view for buckets with external schema
+            return true;
         }
 
-        $hasOtherThanOverwriteOptions = $exportOptions && array_keys($exportOptions) !== ['overwrite'];
-        if ($hasOtherThanOverwriteOptions) {
-            return false;
-        }
-
-        $isAliasInCurrentProject = $tableInfo['isAlias'] &&
-            ((string) $tableInfo['sourceTable']['project']['id'] === $currentProjectId);
-        if ($isAliasInCurrentProject) {
-            return false;
-        }
-
-        return true;
+        return false;
     }
 }
