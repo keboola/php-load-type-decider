@@ -90,7 +90,7 @@ final class LoadTypeDeciderTest extends TestCase
             [],
             false,
         ];
-        yield 'bigquery not cloneable' => [
+        yield 'cloneable bigquery' => [
             [
                 'id' => 'foo.bar',
                 'name' => 'bar',
@@ -99,6 +99,82 @@ final class LoadTypeDeciderTest extends TestCase
             ],
             'bigquery',
             ['overwrite' => false],
+            true,
+        ];
+        yield 'bigquery table to snowflake workspace' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'snowflake',
+            ['overwrite' => false],
+            false,
+        ];
+        yield 'bigquery alias table' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => true,
+                'aliasColumnsAutoSync' => true,
+            ],
+            'bigquery',
+            ['overwrite' => false],
+            true,
+        ];
+        yield 'bigquery alias filtered columns' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => true,
+                'aliasColumnsAutoSync' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false],
+            false,
+        ];
+        yield 'bigquery alias filtered rows' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => true,
+                'aliasColumnsAutoSync' => true,
+                'aliasFilter' => [
+                    'column' => 'PassengerId',
+                    'operator' => 'eq',
+                    'values' => ['12'],
+                ],
+            ],
+            'bigquery',
+            ['overwrite' => false],
+            false,
+        ];
+        yield 'bigquery external bucket' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'hasExternalSchema' => true],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false],
+            false,
+        ];
+        yield 'bigquery filtered' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            [
+                'changed_since' => '-2 days',
+            ],
             false,
         ];
         yield 'alias table' => [

@@ -8,6 +8,8 @@ use Keboola\Package\LoadTypeDecider\Exception\InvalidInputException;
 
 final class LoadTypeDecider
 {
+    private const CLONE_SUPPORTED_WORKSPACE_TYPES = ['snowflake', 'bigquery'];
+
     /**
      * @param array<string, mixed> $tableInfo
      * @param array<string, mixed> $exportOptions
@@ -67,7 +69,7 @@ final class LoadTypeDecider
 
         if (array_keys($exportOptions) !== ['overwrite'] ||
             ($tableInfo['bucket']['backend'] !== $workspaceType) ||
-            ($workspaceType !== 'snowflake')
+            !in_array($workspaceType, self::CLONE_SUPPORTED_WORKSPACE_TYPES, true)
         ) {
             return false;
         }
