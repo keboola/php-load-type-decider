@@ -352,7 +352,7 @@ final class LoadTypeDeciderTest extends TestCase
             ],
             'workspaceType' => 'bigquery',
             'exportOptions' => [],
-            'expected' => 'Table "foo.bar" is an alias, which is not supported when loading Bigquery tables.',
+            'expected' => 'Table "foo.bar" is an alias, which is not supported when loading BigQuery tables.',
         ];
 
         yield 'Filtered BigQuery Table' => [
@@ -366,7 +366,7 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'seconds' => 5,
             ],
-            'expected' => 'Option "seconds" is not supported when loading Bigquery table "foo.bar".',
+            'expected' => 'Option "seconds" is not supported when loading BigQuery table "foo.bar".',
         ];
 
         yield 'BigQuery Table with limit' => [
@@ -380,7 +380,7 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'rows' => 1,
             ],
-            'expected' => 'Option "rows" is not supported when loading Bigquery table "foo.bar".',
+            'expected' => 'Option "rows" is not supported when loading BigQuery table "foo.bar".',
         ];
 
         yield 'BigQuery Table with whereOperator' => [
@@ -394,7 +394,7 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'whereOperator' => 'and',
             ],
-            'expected' => 'Option "whereOperator" is not supported when loading Bigquery table "foo.bar".',
+            'expected' => 'Option "whereOperator" is not supported when loading BigQuery table "foo.bar".',
         ];
 
         yield 'BigQuery Table with whereColumn' => [
@@ -408,7 +408,7 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'whereColumn' => 'name',
             ],
-            'expected' => 'Option "whereColumn" is not supported when loading Bigquery table "foo.bar".',
+            'expected' => 'Option "whereColumn" is not supported when loading BigQuery table "foo.bar".',
         ];
 
         yield 'BigQuery Table with whereValues' => [
@@ -422,7 +422,7 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'whereValues' => ['foo'],
             ],
-            'expected' => 'Option "whereValues" is not supported when loading Bigquery table "foo.bar".',
+            'expected' => 'Option "whereValues" is not supported when loading BigQuery table "foo.bar".',
         ];
 
         yield 'BigQuery Table with columns' => [
@@ -436,7 +436,7 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'columns' => [],
             ],
-            'expected' => 'Option "columns" is not supported when loading Bigquery table "foo.bar".',
+            'expected' => 'Option "columns" is not supported when loading BigQuery table "foo.bar".',
         ];
 
         yield 'Snowflake Table to bigquery workspace' => [
@@ -450,7 +450,7 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'columns' => [],
             ],
-            'expected' => 'Workspace type "bigquery" does not match table backend type "snowflake" when loading Bigquery table "foo.bar".',
+            'expected' => 'Workspace type "bigquery" does not match table backend type "snowflake" when loading BigQuery table "foo.bar".',
         ];
     }
 

@@ -77,7 +77,7 @@ final class LoadTypeDecider
         if ($isWorkspaceBigQuery) {
             if ($isBackendMismatch) {
                 throw new InvalidInputException(sprintf(
-                    'Workspace type "%s" does not match table backend type "%s" when loading Bigquery table "%s".',
+                    'Workspace type "%s" does not match table backend type "%s" when loading BigQuery table "%s".',
                     $workspaceType,
                     $tableInfo['bucket']['backend'],
                     $tableInfo['id'],
@@ -86,7 +86,7 @@ final class LoadTypeDecider
 
             if ($hasOtherThanOverwriteOptions) {
                 throw new InvalidInputException(sprintf(
-                    'Option "%s" is not supported when loading Bigquery table "%s".',
+                    'Option "%s" is not supported when loading BigQuery table "%s".',
                     implode(', ', array_keys($exportOptions)),
                     $tableInfo['id'],
                 ));
@@ -98,7 +98,7 @@ final class LoadTypeDecider
             */
             if ($isAliasInCurrentProject) {
                 throw new InvalidInputException(sprintf(
-                    'Table "%s" is an alias, which is not supported when loading Bigquery tables.',
+                    'Table "%s" is an alias, which is not supported when loading BigQuery tables.',
                     $tableInfo['id'],
                 ));
             }
