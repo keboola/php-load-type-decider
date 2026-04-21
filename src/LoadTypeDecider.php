@@ -11,8 +11,56 @@ final class LoadTypeDecider
     private const CLONE_SUPPORTED_WORKSPACE_TYPES = ['snowflake', 'bigquery'];
 
     /**
-     * @param array<string, mixed> $tableInfo
-     * @param array<string, mixed> $exportOptions
+     * Pre-flight validation for a workspace table load.
+     *
+     * Call this BEFORE {@see canClone()} / {@see canUseView()} to reject loads
+     * that no load method (clone / view / copy) can satisfy. In the standard
+     * input-mapping flow the order is:
+     *
+     *   checkViableLoadMethod()  -> throws if unsupported combo
+     *   canClone()               -> prefer zero-copy CLONE when applicable
+     *   canUseView()             -> otherwise prefer a VIEW when applicable
+     *   (fallback)               -> COPY (always available)
+     *
+     * Today the method enforces only BigQuery-specific constraints; for every
+     * other workspace type (snowflake / redshift / exasol / teradata) it is a
+     * no-op because the COPY fallback can always handle the load.
+     *
+     * For a BigQuery workspace it throws when any of the following holds:
+     *
+     *   1. Backend mismatch — the bucket's backend is not 'bigquery'. Cross-
+     *      backend loads are not supported for BigQuery workspaces at all
+     *      (there is no COPY staging path to bridge Snowflake -> BigQuery,
+     *      for example).
+     *   2. Unsupported export options — BigQuery workspace loads only honor
+     *      the 'overwrite' option. Any filtering / slicing option (columns,
+     *      rows, changed_since, seconds, whereColumn, whereOperator,
+     *      whereValues, ...) is rejected here rather than silently ignored
+     *      so the caller sees a clear error.
+     *   3. Alias in the current project — BigQuery does not support loading
+     *      from a same-project alias. Note: `$tableInfo['isAlias']` is true
+     *      for BOTH local aliases AND tables shared from a different project;
+     *      the latter IS supported, so we check `sourceTable.project.id
+     *      !== $currentProjectId` to distinguish them. See
+     *      https://keboolaglobal.slack.com/archives/C055HSMKX51/p1699434828910109
+     *
+     * @param array<string, mixed> $tableInfo       Storage API table detail
+     *                                              (must carry `id`, `isAlias`,
+     *                                              `bucket.backend`, and
+     *                                              `sourceTable.project.id`
+     *                                              when `isAlias` is true).
+     * @param string               $workspaceType   Target workspace backend
+     *                                              (e.g. 'bigquery',
+     *                                              'snowflake', ...).
+     * @param array<string, mixed> $exportOptions   Options about to be passed
+     *                                              to the workspace load.
+     * @param string               $currentProjectId Project the caller is
+     *                                              loading into; used to tell
+     *                                              local aliases from
+     *                                              cross-project shared tables.
+     *
+     * @throws InvalidInputException when the requested BigQuery load cannot
+     *                               be served by any load method.
      */
     public static function checkViableLoadMethod(
         array $tableInfo,
