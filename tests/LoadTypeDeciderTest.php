@@ -477,13 +477,13 @@ final class LoadTypeDeciderTest extends TestCase
      */
     public static function checkViableLoadMethodPassProvider(): Generator
     {
-        yield 'BigQuery Table Alias' => [
+        yield 'BigQuery cross-project shared table (isAlias=true, different project)' => [
             'tableInfo' => [
                 'id' => 'foo.bar',
                 'name' => 'bar',
                 'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => false,
-                'sourceTable' => ['project' => ['id' => '123']],
+                'isAlias' => true,
+                'sourceTable' => ['project' => ['id' => '321']],
             ],
             'workspaceType' => 'bigquery',
             'exportOptions' => [],
