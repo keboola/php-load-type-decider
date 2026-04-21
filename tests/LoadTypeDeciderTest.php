@@ -79,6 +79,28 @@ final class LoadTypeDeciderTest extends TestCase
             ['overwrite' => false],
             true,
         ];
+        yield 'snowflake with empty export options' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'snowflake'],
+                'isAlias' => false,
+            ],
+            'snowflake',
+            [],
+            false,
+        ];
+        yield 'bigquery with empty export options' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            [],
+            false,
+        ];
         yield 'redshift' => [
             [
                 'id' => 'foo.bar',
