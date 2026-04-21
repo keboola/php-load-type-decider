@@ -439,6 +439,22 @@ final class LoadTypeDeciderTest extends TestCase
             'expected' => 'Option "columns" is not supported when loading BigQuery table "foo.bar".',
         ];
 
+        yield 'BigQuery Table with overwrite plus unsupported option' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'overwrite' => true,
+                'columns' => [],
+            ],
+            // the message MUST NOT list 'overwrite' since overwrite IS supported
+            'expected' => 'Option "columns" is not supported when loading BigQuery table "foo.bar".',
+        ];
+
         yield 'Snowflake Table to bigquery workspace' => [
             'tableInfo' => [
                 'id' => 'foo.bar',

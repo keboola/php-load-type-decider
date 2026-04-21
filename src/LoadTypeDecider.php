@@ -87,7 +87,7 @@ final class LoadTypeDecider
             if ($hasOtherThanOverwriteOptions) {
                 throw new InvalidInputException(sprintf(
                     'Option "%s" is not supported when loading BigQuery table "%s".',
-                    implode(', ', array_keys($exportOptions)),
+                    implode(', ', array_diff(array_keys($exportOptions), ['overwrite'])),
                     $tableInfo['id'],
                 ));
             }
