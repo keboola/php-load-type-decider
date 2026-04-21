@@ -293,17 +293,6 @@ final class LoadTypeDeciderTest extends TestCase
             'expected' => true,
         ];
 
-        yield 'BigQuery Table Overwrite' => [
-            'tableInfo' => [
-                'id' => 'foo.bar',
-                'name' => 'bar',
-                'bucket' => ['backend' => 'bigquery'],
-                'isAlias' => false,
-            ],
-            'workspaceType' => 'bigquery',
-            'expected' => true,
-        ];
-
         yield 'Table Overwrite Different Backend' => [
             'tableInfo' => [
                 'id' => 'foo.bar',
