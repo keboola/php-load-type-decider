@@ -186,6 +186,45 @@ final class LoadTypeDeciderTest extends TestCase
             ['overwrite' => false],
             false,
         ];
+        // BigQuery refuses `CREATE TABLE ... CLONE` against an Analytics-Hub-linked
+        // dataset (`Cannot clone tables from a linked dataset.`) regardless of the
+        // publisher's restrictedExportPolicy. Validated against BQ on 2026-05-20.
+        yield 'bigquery linked bucket: CLONE rejected' => [
+            [
+                'id' => 'in.c-linked.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'isLinked' => true],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false],
+            false,
+        ];
+        yield 'bigquery non-linked bucket: CLONE allowed' => [
+            [
+                'id' => 'in.c-main.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'isLinked' => false],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false],
+            true,
+        ];
+        // The linked-bucket rule is BigQuery-specific (Snowflake's data-sharing
+        // model does not have the Analytics-Hub egress restriction). Snowflake
+        // tables in linked buckets should remain CLONE-eligible.
+        yield 'snowflake linked bucket: CLONE allowed' => [
+            [
+                'id' => 'in.c-linked.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'snowflake', 'isLinked' => true],
+                'isAlias' => false,
+            ],
+            'snowflake',
+            ['overwrite' => false],
+            true,
+        ];
         yield 'bigquery filtered' => [
             [
                 'id' => 'foo.bar',
