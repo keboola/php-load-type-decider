@@ -128,6 +128,18 @@ final class LoadTypeDecider
             // clone is not allowed for buckets with external schema
             return false;
         }
+
+        // BigQuery refuses `CREATE TABLE ... CLONE` against an Analytics-Hub-linked
+        // dataset (`Cannot clone tables from a linked dataset.`) regardless of the
+        // publisher's restrictedExportPolicy. Confirmed against BQ on 2026-05-20.
+        // Reject here so the rule is centralized for every IM-load / dry-run caller.
+        if ($workspaceType === 'bigquery'
+            && array_key_exists('isLinked', $tableInfo['bucket'])
+            && $tableInfo['bucket']['isLinked'] === true
+        ) {
+            return false;
+        }
+
         return true;
     }
 
