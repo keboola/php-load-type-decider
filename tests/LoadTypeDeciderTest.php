@@ -6,7 +6,9 @@ namespace Keboola\Package\LoadTypeDecider\Tests;
 
 use Generator;
 use Keboola\Package\LoadTypeDecider\Exception\InvalidInputException;
+use Keboola\Package\LoadTypeDecider\LoadType;
 use Keboola\Package\LoadTypeDecider\LoadTypeDecider;
+use Keboola\Package\LoadTypeDecider\LoadTypeDeciderFeatures;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -288,6 +290,32 @@ final class LoadTypeDeciderTest extends TestCase
             ],
             'snowflake',
             ['overwrite' => false],
+            false,
+        ];
+        // `dropTimestampColumn` is consumed by Snowflake's CLONE job, so it is
+        // stripped here and CLONE stays viable.
+        yield 'snowflake dropTimestampColumn: CLONE allowed' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'snowflake'],
+                'isAlias' => false,
+            ],
+            'snowflake',
+            ['overwrite' => false, 'dropTimestampColumn' => true],
+            true,
+        ];
+        // BigQuery's CLONE path never consumes `dropTimestampColumn`, so it is
+        // NOT stripped and the leftover option disqualifies CLONE.
+        yield 'bigquery dropTimestampColumn: CLONE blocked' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false, 'dropTimestampColumn' => true],
             false,
         ];
     }
@@ -579,6 +607,150 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'columns' => [],
             ],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $tableInfo
+     * @param array<string, mixed> $exportOptions
+     * @param list<LoadType>       $expectedPossible
+     */
+    #[DataProvider('decideProvider')]
+    public function testDecide(
+        array $tableInfo,
+        string $workspaceType,
+        array $exportOptions,
+        LoadTypeDeciderFeatures $features,
+        LoadType $expectedPreferred,
+        array $expectedPossible,
+    ): void {
+        $decision = LoadTypeDecider::decide($tableInfo, $workspaceType, $exportOptions, $features);
+
+        self::assertSame($expectedPreferred, $decision->preferred);
+        self::assertSame($expectedPossible, $decision->possible);
+    }
+
+    /**
+     * @return Generator<string, array{
+     *     tableInfo: array<string, mixed>,
+     *     workspaceType: string,
+     *     exportOptions: array<string, mixed>,
+     *     features: LoadTypeDeciderFeatures,
+     *     expectedPreferred: LoadType,
+     *     expectedPossible: list<LoadType>,
+     * }>
+     */
+    public static function decideProvider(): Generator
+    {
+        $bigqueryTable = [
+            'id' => 'in.c-main.bar',
+            'name' => 'bar',
+            'bucket' => ['backend' => 'bigquery'],
+            'isAlias' => false,
+        ];
+        $snowflakeTable = [
+            'id' => 'in.c-main.bar',
+            'name' => 'bar',
+            'bucket' => ['backend' => 'snowflake'],
+            'isAlias' => false,
+        ];
+
+        yield 'bigquery, default-im-view OFF: CLONE preferred, VIEW still possible' => [
+            'tableInfo' => $bigqueryTable,
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::CLONE,
+            'expectedPossible' => [LoadType::COPY, LoadType::CLONE, LoadType::VIEW],
+        ];
+
+        yield 'bigquery, default-im-view ON: VIEW preferred' => [
+            'tableInfo' => $bigqueryTable,
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: true, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::VIEW,
+            'expectedPossible' => [LoadType::COPY, LoadType::CLONE, LoadType::VIEW],
+        ];
+
+        // VIEW is viable for BQ even when CLONE is not, so the default-view flag
+        // still yields VIEW (no CLONE in possible).
+        yield 'bigquery external bucket, default-im-view ON: VIEW preferred, CLONE blocked' => [
+            'tableInfo' => [
+                'id' => 'in.c-ext.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'hasExternalSchema' => true],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: true, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::VIEW,
+            'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+
+        // Filtered export disqualifies CLONE; a VIEW would silently drop the
+        // filter, so even with the flag ON the safe default is COPY. VIEW stays in
+        // `possible` (a UI may still offer it as an explicit, filter-dropping choice).
+        yield 'bigquery filtered, default-im-view ON: COPY preferred (filter would be dropped by VIEW)' => [
+            'tableInfo' => $bigqueryTable,
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['changed_since' => '-1 day'],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: true, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::COPY,
+            'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+
+        // Regular (non-external) Snowflake table: CLONE is viable, VIEW is not
+        // (Snowflake VIEW loads require an external-schema bucket).
+        yield 'snowflake regular table: CLONE preferred' => [
+            'tableInfo' => $snowflakeTable,
+            'workspaceType' => 'snowflake',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: true),
+            'expectedPreferred' => LoadType::CLONE,
+            'expectedPossible' => [LoadType::COPY, LoadType::CLONE],
+        ];
+
+        // External-schema Snowflake bucket: CLONE blocked, VIEW viable when the
+        // read-only-storage feature is on. VIEW is never the Snowflake default,
+        // so the preference is COPY.
+        yield 'snowflake external bucket, RO-storage ON: VIEW possible, COPY preferred' => [
+            'tableInfo' => [
+                'id' => 'in.c-ext.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'snowflake', 'hasExternalSchema' => true],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'snowflake',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: true),
+            'expectedPreferred' => LoadType::COPY,
+            'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+
+        yield 'snowflake external bucket, RO-storage OFF: VIEW not offered, only COPY' => [
+            'tableInfo' => [
+                'id' => 'in.c-ext.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'snowflake', 'hasExternalSchema' => true],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'snowflake',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::COPY,
+            'expectedPossible' => [LoadType::COPY],
+        ];
+
+        // default-im-view is BigQuery-only: it never flips the Snowflake default.
+        yield 'snowflake, default-im-view ON: still CLONE preferred (BQ-only flag)' => [
+            'tableInfo' => $snowflakeTable,
+            'workspaceType' => 'snowflake',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: true, snowflakeReadOnlyStorage: true),
+            'expectedPreferred' => LoadType::CLONE,
+            'expectedPossible' => [LoadType::COPY, LoadType::CLONE],
         ];
     }
 }
