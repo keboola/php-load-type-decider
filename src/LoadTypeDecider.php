@@ -49,6 +49,17 @@ final class LoadTypeDecider
         array $exportOptions,
         LoadTypeDeciderFeatures $features,
     ): LoadTypeDecision {
+        // Normalize the well-known `overwrite` default so the library is a
+        // self-contained source of truth: `canClone()` requires the option bag to
+        // be exactly `['overwrite']`, while `$isFullLoad` below treats a bag with
+        // no filtering options as full. Without this, a caller that passes an
+        // empty bag (omitting `overwrite`) would be classified as a full load yet
+        // get CLONE disqualified — an inconsistency. Idempotent when `overwrite`
+        // is already present.
+        if (!array_key_exists('overwrite', $exportOptions)) {
+            $exportOptions['overwrite'] = false;
+        }
+
         $canClone = self::canClone($tableInfo, $workspaceType, $exportOptions);
 
         $canView = self::canUseView($tableInfo, $workspaceType);

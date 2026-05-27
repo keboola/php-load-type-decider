@@ -673,6 +673,19 @@ final class LoadTypeDeciderTest extends TestCase
             'expectedPossible' => [LoadType::COPY, LoadType::CLONE, LoadType::VIEW],
         ];
 
+        // Empty option bag (no `overwrite` key): decide() normalizes `overwrite`
+        // to false so a full load is not silently disqualified from CLONE — the
+        // library must behave identically whether or not the caller pre-seeded
+        // `overwrite`.
+        yield 'bigquery empty options, default-im-view OFF: CLONE preferred (overwrite normalized)' => [
+            'tableInfo' => $bigqueryTable,
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::CLONE,
+            'expectedPossible' => [LoadType::COPY, LoadType::CLONE, LoadType::VIEW],
+        ];
+
         // VIEW is viable for BQ even when CLONE is not, so the default-view flag
         // still yields VIEW (no CLONE in possible).
         yield 'bigquery external bucket, default-im-view ON: VIEW preferred, CLONE blocked' => [
