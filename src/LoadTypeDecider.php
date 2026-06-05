@@ -8,7 +8,94 @@ use Keboola\Package\LoadTypeDecider\Exception\InvalidInputException;
 
 final class LoadTypeDecider
 {
-    private const CLONE_SUPPORTED_WORKSPACE_TYPES = ['snowflake', 'bigquery'];
+    public const WORKSPACE_TYPE_SNOWFLAKE = 'snowflake';
+    public const WORKSPACE_TYPE_BIGQUERY = 'bigquery';
+
+    private const CLONE_SUPPORTED_WORKSPACE_TYPES = [
+        self::WORKSPACE_TYPE_SNOWFLAKE,
+        self::WORKSPACE_TYPE_BIGQUERY,
+    ];
+
+    /**
+     * Decide which load type the server uses for a workspace table load.
+     *
+     * This is the single source of truth for the load-type decision across the
+     * platform: it computes both the `preferred` type (used when the caller does
+     * not pin one) and the full `possible` set (for UIs offering a manual
+     * override). It never reads features from a database — every feature gate is
+     * supplied via {@see LoadTypeDeciderFeatures}.
+     *
+     * Preference rules:
+     *   - BigQuery with `bigqueryDefaultImView` on, for a full load (no
+     *     filtering options) where VIEW is viable -> VIEW. Lets a project default
+     *     IM loads to a live VIEW instead of a snapshot.
+     *   - otherwise CLONE when viable (zero-copy, identical row semantics).
+     *   - otherwise COPY (always available).
+     *
+     * VIEW is only auto-preferred for BigQuery behind the feature, and only for a
+     * full load: a VIEW reflects the whole source table and cannot honor
+     * filters / columns / time-windows, so auto-promoting a filtered request to
+     * VIEW would silently drop the filter. Such requests fall through to COPY.
+     * For every other backend VIEW stays a manual, opt-in choice and never
+     * becomes the preference even when it is in `possible`.
+     *
+     * @param array<string, mixed> $tableInfo     Storage API table detail (see {@see canClone()}).
+     * @param string               $workspaceType Target workspace backend.
+     * @param array<string, mixed> $exportOptions Options about to be passed to the workspace load.
+     */
+    public static function decide(
+        array $tableInfo,
+        string $workspaceType,
+        array $exportOptions,
+        LoadTypeDeciderFeatures $features,
+    ): LoadTypeDecision {
+        // Normalize the well-known `overwrite` default so the library is a
+        // self-contained source of truth: `canClone()` requires the option bag to
+        // be exactly `['overwrite']`, while `$isFullLoad` below treats a bag with
+        // no filtering options as full. Without this, a caller that passes an
+        // empty bag (omitting `overwrite`) would be classified as a full load yet
+        // get CLONE disqualified — an inconsistency. Idempotent when `overwrite`
+        // is already present.
+        if (!array_key_exists('overwrite', $exportOptions)) {
+            $exportOptions['overwrite'] = false;
+        }
+
+        $canClone = self::canClone($tableInfo, $workspaceType, $exportOptions);
+
+        $canView = self::canUseView($tableInfo, $workspaceType);
+        // Snowflake VIEW loads are gated behind the project read-only-storage
+        // input-mapping feature; without it VIEW is not offered.
+        if ($workspaceType === self::WORKSPACE_TYPE_SNOWFLAKE && !$features->snowflakeReadOnlyStorage) {
+            $canView = false;
+        }
+
+        $possible = [LoadType::COPY];
+        if ($canClone) {
+            $possible[] = LoadType::CLONE;
+        }
+        if ($canView) {
+            $possible[] = LoadType::VIEW;
+        }
+
+        // A VIEW reflects the whole source table, so it must not be auto-preferred
+        // for a request carrying filtering options it would silently drop. The
+        // only option a full BigQuery load legitimately carries is `overwrite`.
+        $isFullLoad = array_diff(array_keys($exportOptions), ['overwrite']) === [];
+
+        if ($workspaceType === self::WORKSPACE_TYPE_BIGQUERY
+            && $features->bigqueryDefaultImView
+            && $canView
+            && $isFullLoad
+        ) {
+            $preferred = LoadType::VIEW;
+        } elseif ($canClone) {
+            $preferred = LoadType::CLONE;
+        } else {
+            $preferred = LoadType::COPY;
+        }
+
+        return new LoadTypeDecision($preferred, $possible);
+    }
 
     /**
      * Pre-flight validation for a workspace table load.
@@ -68,7 +155,7 @@ final class LoadTypeDecider
         array $exportOptions,
         string $currentProjectId,
     ): void {
-        $isWorkspaceBigQuery = $workspaceType === 'bigquery';
+        $isWorkspaceBigQuery = $workspaceType === self::WORKSPACE_TYPE_BIGQUERY;
         $isBackendMismatch = $tableInfo['bucket']['backend'] !== $workspaceType;
         $hasOtherThanOverwriteOptions = $exportOptions && array_keys($exportOptions) !== ['overwrite'];
         $isAliasInCurrentProject = $tableInfo['isAlias'] &&
@@ -111,6 +198,15 @@ final class LoadTypeDecider
      */
     public static function canClone(array $tableInfo, string $workspaceType, array $exportOptions): bool
     {
+        // `dropTimestampColumn` is honored by Snowflake's CLONE job
+        // (WorkspaceLoadCloneJob, Snowflake-only) — strip it so it does not block
+        // CLONE there. On BigQuery the CLONE path never consumes the option, so
+        // leaving it in the bag (below) correctly disqualifies CLONE and the load
+        // falls back to COPY (which has no `_timestamp`).
+        if ($workspaceType === self::WORKSPACE_TYPE_SNOWFLAKE) {
+            unset($exportOptions['dropTimestampColumn']);
+        }
+
         if ($tableInfo['isAlias'] && (empty($tableInfo['aliasColumnsAutoSync']) || !empty($tableInfo['aliasFilter']))) {
             return false;
         }
@@ -133,7 +229,7 @@ final class LoadTypeDecider
         // dataset (`Cannot clone tables from a linked dataset.`) regardless of the
         // publisher's restrictedExportPolicy. Confirmed against BQ on 2026-05-20.
         // Reject here so the rule is centralized for every IM-load / dry-run caller.
-        if ($workspaceType === 'bigquery'
+        if ($workspaceType === self::WORKSPACE_TYPE_BIGQUERY
             && array_key_exists('isLinked', $tableInfo['bucket'])
             && $tableInfo['bucket']['isLinked'] === true
         ) {
@@ -152,12 +248,12 @@ final class LoadTypeDecider
     ): bool {
         $backend = $tableInfo['bucket']['backend'];
         $isBackendMatch = $backend === $workspaceType;
-        if ($isBackendMatch && $workspaceType === 'bigquery') {
+        if ($isBackendMatch && $workspaceType === self::WORKSPACE_TYPE_BIGQUERY) {
             return true;
         }
 
         if ($isBackendMatch
-            && $backend === 'snowflake'
+            && $backend === self::WORKSPACE_TYPE_SNOWFLAKE
             && array_key_exists('hasExternalSchema', $tableInfo['bucket'])
             && $tableInfo['bucket']['hasExternalSchema'] === true
         ) {
