@@ -2,10 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Keboola\Package\LoadTypeDecider;
+namespace Keboola\LoadTypeDecider;
 
-use Keboola\Package\LoadTypeDecider\Exception\InvalidInputException;
+use Keboola\LoadTypeDecider\Exception\InvalidInputException;
 
+/**
+ * Storage API table detail, narrowed to the fields the decider reads. Unsealed
+ * (`...`) so callers may pass the full table payload; only these keys are typed.
+ *
+ * @phpstan-type StorageTableInfo array{
+ *     id: string,
+ *     isAlias: bool,
+ *     aliasColumnsAutoSync?: mixed,
+ *     aliasFilter?: mixed,
+ *     bucket: array{backend: string, hasExternalSchema?: bool, isLinked?: bool, ...},
+ *     sourceTable?: array{project: array{id: int|string, ...}, ...},
+ *     ...
+ * }
+ */
 final class LoadTypeDecider
 {
     public const WORKSPACE_TYPE_SNOWFLAKE = 'snowflake';
@@ -39,7 +53,7 @@ final class LoadTypeDecider
      * For every other backend VIEW stays a manual, opt-in choice and never
      * becomes the preference even when it is in `possible`.
      *
-     * @param array<string, mixed> $tableInfo     Storage API table detail (see {@see canClone()}).
+     * @param StorageTableInfo $tableInfo     Storage API table detail (see {@see canClone()}).
      * @param string               $workspaceType Target workspace backend.
      * @param array<string, mixed> $exportOptions Options about to be passed to the workspace load.
      */
@@ -131,7 +145,7 @@ final class LoadTypeDecider
      *      !== $currentProjectId` to distinguish them. See
      *      https://keboolaglobal.slack.com/archives/C055HSMKX51/p1699434828910109
      *
-     * @param array<string, mixed> $tableInfo       Storage API table detail
+     * @param StorageTableInfo $tableInfo       Storage API table detail
      *                                              (must carry `id`, `isAlias`,
      *                                              `bucket.backend`, and
      *                                              `sourceTable.project.id`
@@ -158,8 +172,9 @@ final class LoadTypeDecider
         $isWorkspaceBigQuery = $workspaceType === self::WORKSPACE_TYPE_BIGQUERY;
         $isBackendMismatch = $tableInfo['bucket']['backend'] !== $workspaceType;
         $hasOtherThanOverwriteOptions = $exportOptions && array_keys($exportOptions) !== ['overwrite'];
-        $isAliasInCurrentProject = $tableInfo['isAlias'] &&
-            ((string) $tableInfo['sourceTable']['project']['id'] === $currentProjectId);
+        $isAliasInCurrentProject = $tableInfo['isAlias']
+            && isset($tableInfo['sourceTable'])
+            && (string) $tableInfo['sourceTable']['project']['id'] === $currentProjectId;
 
         if ($isWorkspaceBigQuery) {
             if ($isBackendMismatch) {
@@ -193,7 +208,7 @@ final class LoadTypeDecider
     }
 
     /**
-     * @param array<string, mixed> $tableInfo
+     * @param StorageTableInfo $tableInfo
      * @param array<string, mixed> $exportOptions
      */
     public static function canClone(array $tableInfo, string $workspaceType, array $exportOptions): bool
@@ -240,7 +255,7 @@ final class LoadTypeDecider
     }
 
     /**
-     * @param array<string, mixed> $tableInfo
+     * @param StorageTableInfo $tableInfo
      */
     public static function canUseView(
         array $tableInfo,

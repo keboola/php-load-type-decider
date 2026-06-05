@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Keboola\Package\LoadTypeDecider;
+namespace Keboola\LoadTypeDecider;
 
 /**
  * Project-feature inputs to {@see LoadTypeDecider::decide()}.
