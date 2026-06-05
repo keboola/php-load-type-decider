@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Keboola\Package\LoadTypeDecider;
+namespace Keboola\LoadTypeDecider;
 
 /**
  * Concrete load types the decider can resolve to. Intentionally has no `AUTO`

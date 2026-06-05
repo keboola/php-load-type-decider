@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Keboola\Package\LoadTypeDecider\Exception;
+namespace Keboola\LoadTypeDecider\Exception;
 
 use Keboola\CommonExceptions\ApplicationExceptionInterface;
 use RuntimeException;

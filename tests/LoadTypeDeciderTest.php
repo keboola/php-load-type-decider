@@ -2,22 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Keboola\Package\LoadTypeDecider\Tests;
+namespace Keboola\LoadTypeDecider\Tests;
 
 use Generator;
-use Keboola\Package\LoadTypeDecider\Exception\InvalidInputException;
-use Keboola\Package\LoadTypeDecider\LoadType;
-use Keboola\Package\LoadTypeDecider\LoadTypeDecider;
-use Keboola\Package\LoadTypeDecider\LoadTypeDeciderFeatures;
+use Keboola\LoadTypeDecider\Exception\InvalidInputException;
+use Keboola\LoadTypeDecider\LoadType;
+use Keboola\LoadTypeDecider\LoadTypeDecider;
+use Keboola\LoadTypeDecider\LoadTypeDeciderFeatures;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * @phpstan-import-type StorageTableInfo from LoadTypeDecider
+ */
 #[CoversClass(LoadTypeDecider::class)]
 final class LoadTypeDeciderTest extends TestCase
 {
     /**
-     * @param array<string, mixed> $tableInfo
+     * @param StorageTableInfo $tableInfo
      * @param array<string, mixed> $exportOptions
      */
     #[DataProvider('decideCanCloneProvider')]
@@ -31,7 +34,7 @@ final class LoadTypeDeciderTest extends TestCase
     }
 
     /**
-     * @return Generator<string, array{array<string, mixed>, string, array<string, mixed>, bool}>
+     * @return Generator<string, array{StorageTableInfo, string, array<string, mixed>, bool}>
      */
     public static function decideCanCloneProvider(): Generator
     {
@@ -321,7 +324,7 @@ final class LoadTypeDeciderTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $tableInfo
+     * @param StorageTableInfo $tableInfo
      */
     #[DataProvider('decideCanUseViewProvider')]
     public function testDecideCanUseView(
@@ -333,7 +336,7 @@ final class LoadTypeDeciderTest extends TestCase
     }
 
     /**
-     * @return Generator<string, array{tableInfo: array<string, mixed>, workspaceType: string, expected: bool}>
+     * @return Generator<string, array{tableInfo: StorageTableInfo, workspaceType: string, expected: bool}>
      */
     public static function decideCanUseViewProvider(): Generator
     {
@@ -395,7 +398,7 @@ final class LoadTypeDeciderTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $tableInfo
+     * @param StorageTableInfo $tableInfo
      * @param array<string, mixed> $exportOptions
      */
     #[DataProvider('checkViableLoadMethodExceptionProvider')]
@@ -412,7 +415,7 @@ final class LoadTypeDeciderTest extends TestCase
 
     /**
      * @return Generator<string, array{
-     *     tableInfo: array<string, mixed>,
+     *     tableInfo: StorageTableInfo,
      *     workspaceType: string,
      *     exportOptions: array<string, mixed>,
      *     expected: string,
@@ -431,6 +434,19 @@ final class LoadTypeDeciderTest extends TestCase
             'workspaceType' => 'bigquery',
             'exportOptions' => [],
             'expected' => 'Table "foo.bar" is an alias, which is not supported when loading BigQuery tables.',
+        ];
+
+        yield 'BigQuery Alias without sourceTable.project.id' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => true,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [],
+            'expected' => 'Table "foo.bar" is an alias but does not carry "sourceTable.project.id", so a local '
+                . 'alias cannot be distinguished from a cross-project shared table for a BigQuery load.',
         ];
 
         yield 'Filtered BigQuery Table' => [
@@ -544,12 +560,13 @@ final class LoadTypeDeciderTest extends TestCase
             'exportOptions' => [
                 'columns' => [],
             ],
-            'expected' => 'Workspace type "bigquery" does not match table backend type "snowflake" when loading BigQuery table "foo.bar".',
+            'expected' => 'Workspace type "bigquery" does not match table backend type "snowflake" '
+                . 'when loading BigQuery table "foo.bar".',
         ];
     }
 
     /**
-     * @param array<string, mixed> $tableInfo
+     * @param StorageTableInfo $tableInfo
      * @param array<string, mixed> $exportOptions
      */
     #[DataProvider('checkViableLoadMethodPassProvider')]
@@ -564,7 +581,7 @@ final class LoadTypeDeciderTest extends TestCase
 
     /**
      * @return Generator<string, array{
-     *     tableInfo: array<string, mixed>,
+     *     tableInfo: StorageTableInfo,
      *     workspaceType: string,
      *     exportOptions: array<string, mixed>,
      * }>
@@ -611,7 +628,7 @@ final class LoadTypeDeciderTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $tableInfo
+     * @param StorageTableInfo $tableInfo
      * @param array<string, mixed> $exportOptions
      * @param list<LoadType>       $expectedPossible
      */
@@ -632,7 +649,7 @@ final class LoadTypeDeciderTest extends TestCase
 
     /**
      * @return Generator<string, array{
-     *     tableInfo: array<string, mixed>,
+     *     tableInfo: StorageTableInfo,
      *     workspaceType: string,
      *     exportOptions: array<string, mixed>,
      *     features: LoadTypeDeciderFeatures,

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Keboola\Package\LoadTypeDecider;
+namespace Keboola\LoadTypeDecider;
 
 /**
  * The outcome of {@see LoadTypeDecider::decide()}: the load type the server
