@@ -10,7 +10,7 @@
     ],
     "require": {
         "php": ">=8.2",
-        "keboola/common-exceptions": "^1.0"
+        "keboola/common-exceptions": "^1"
     },
     "require-dev": {
         "phpunit/phpunit": "^11|^12",
