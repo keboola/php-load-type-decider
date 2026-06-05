@@ -436,6 +436,19 @@ final class LoadTypeDeciderTest extends TestCase
             'expected' => 'Table "foo.bar" is an alias, which is not supported when loading BigQuery tables.',
         ];
 
+        yield 'BigQuery Alias without sourceTable.project.id' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => true,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [],
+            'expected' => 'Table "foo.bar" is an alias but does not carry "sourceTable.project.id", so a local '
+                . 'alias cannot be distinguished from a cross-project shared table for a BigQuery load.',
+        ];
+
         yield 'Filtered BigQuery Table' => [
             'tableInfo' => [
                 'id' => 'foo.bar',

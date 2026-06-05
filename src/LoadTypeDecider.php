@@ -142,7 +142,9 @@ final class LoadTypeDecider
      *      from a same-project alias. Note: `$tableInfo['isAlias']` is true
      *      for BOTH local aliases AND tables shared from a different project;
      *      the latter IS supported, so we check `sourceTable.project.id
-     *      !== $currentProjectId` to distinguish them. See
+     *      !== $currentProjectId` to distinguish them. When `isAlias` is true
+     *      but `sourceTable.project.id` is missing the two cannot be told
+     *      apart, so the method fails fast rather than allowing the load. See
      *      https://keboolaglobal.slack.com/archives/C055HSMKX51/p1699434828910109
      *
      * @param StorageTableInfo $tableInfo       Storage API table detail
@@ -172,9 +174,7 @@ final class LoadTypeDecider
         $isWorkspaceBigQuery = $workspaceType === self::WORKSPACE_TYPE_BIGQUERY;
         $isBackendMismatch = $tableInfo['bucket']['backend'] !== $workspaceType;
         $hasOtherThanOverwriteOptions = $exportOptions && array_keys($exportOptions) !== ['overwrite'];
-        $isAliasInCurrentProject = $tableInfo['isAlias']
-            && isset($tableInfo['sourceTable'])
-            && (string) $tableInfo['sourceTable']['project']['id'] === $currentProjectId;
+        $tableId = $tableInfo['id'];
 
         if ($isWorkspaceBigQuery) {
             if ($isBackendMismatch) {
@@ -182,7 +182,7 @@ final class LoadTypeDecider
                     'Workspace type "%s" does not match table backend type "%s" when loading BigQuery table "%s".',
                     $workspaceType,
                     $tableInfo['bucket']['backend'],
-                    $tableInfo['id'],
+                    $tableId,
                 ));
             }
 
@@ -190,19 +190,31 @@ final class LoadTypeDecider
                 throw new InvalidInputException(sprintf(
                     'Option "%s" is not supported when loading BigQuery table "%s".',
                     implode(', ', array_diff(array_keys($exportOptions), ['overwrite'])),
-                    $tableInfo['id'],
+                    $tableId,
                 ));
             }
 
             /* isAlias means that the table is EITHER an alias OR a table shared from a different project.
                 Surprisingly, the table shared from different project IS supported, but the alias is not.
+                We tell them apart via sourceTable.project.id; the contract requires it when isAlias is true,
+                so fail fast when it is missing rather than silently allowing a possibly-unsupported alias.
                 https://keboolaglobal.slack.com/archives/C055HSMKX51/p1699434828910109
             */
-            if ($isAliasInCurrentProject) {
-                throw new InvalidInputException(sprintf(
-                    'Table "%s" is an alias, which is not supported when loading BigQuery tables.',
-                    $tableInfo['id'],
-                ));
+            if ($tableInfo['isAlias']) {
+                if (!isset($tableInfo['sourceTable']['project']['id'])) {
+                    throw new InvalidInputException(sprintf(
+                        'Table "%s" is an alias but does not carry "sourceTable.project.id", so a local alias '
+                        . 'cannot be distinguished from a cross-project shared table for a BigQuery load.',
+                        $tableId,
+                    ));
+                }
+
+                if ((string) $tableInfo['sourceTable']['project']['id'] === $currentProjectId) {
+                    throw new InvalidInputException(sprintf(
+                        'Table "%s" is an alias, which is not supported when loading BigQuery tables.',
+                        $tableId,
+                    ));
+                }
             }
         }
     }
