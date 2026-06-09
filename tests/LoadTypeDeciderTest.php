@@ -625,6 +625,22 @@ final class LoadTypeDeciderTest extends TestCase
                 'columns' => [],
             ],
         ];
+
+        // dropTimestampColumn is CLONE-compatible (canClone strips it), so this preflight must not
+        // reject a BigQuery clone load carrying it — consistent with the documented call order.
+        yield 'BigQuery dropTimestampColumn is not an unsupported option' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'overwrite' => true,
+                'dropTimestampColumn' => true,
+            ],
+        ];
     }
 
     /**
