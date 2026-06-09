@@ -295,8 +295,8 @@ final class LoadTypeDeciderTest extends TestCase
             ['overwrite' => false],
             false,
         ];
-        // `dropTimestampColumn` is consumed by Snowflake's CLONE job, so it is
-        // stripped here and CLONE stays viable.
+        // `dropTimestampColumn` is honored by the CLONE path on both backends, so it
+        // is stripped before the strict-keys check and CLONE stays viable.
         yield 'snowflake dropTimestampColumn: CLONE allowed' => [
             [
                 'id' => 'foo.bar',
@@ -308,9 +308,9 @@ final class LoadTypeDeciderTest extends TestCase
             ['overwrite' => false, 'dropTimestampColumn' => true],
             true,
         ];
-        // BigQuery's CLONE path never consumes `dropTimestampColumn`, so it is
-        // NOT stripped and the leftover option disqualifies CLONE.
-        yield 'bigquery dropTimestampColumn: CLONE blocked' => [
+        // BigQuery now drops `_timestamp` after the clone (LoadTableWithDriver), so
+        // the option no longer disqualifies CLONE.
+        yield 'bigquery dropTimestampColumn: CLONE allowed' => [
             [
                 'id' => 'foo.bar',
                 'name' => 'bar',
@@ -319,7 +319,7 @@ final class LoadTypeDeciderTest extends TestCase
             ],
             'bigquery',
             ['overwrite' => false, 'dropTimestampColumn' => true],
-            false,
+            true,
         ];
     }
 

@@ -225,14 +225,12 @@ final class LoadTypeDecider
      */
     public static function canClone(array $tableInfo, string $workspaceType, array $exportOptions): bool
     {
-        // `dropTimestampColumn` is honored by Snowflake's CLONE job
-        // (WorkspaceLoadCloneJob, Snowflake-only) — strip it so it does not block
-        // CLONE there. On BigQuery the CLONE path never consumes the option, so
-        // leaving it in the bag (below) correctly disqualifies CLONE and the load
-        // falls back to COPY (which has no `_timestamp`).
-        if ($workspaceType === self::WORKSPACE_TYPE_SNOWFLAKE) {
-            unset($exportOptions['dropTimestampColumn']);
-        }
+        // `dropTimestampColumn` is honored by the CLONE path on both supported
+        // backends — Snowflake via WorkspaceLoadCloneJob, BigQuery via
+        // LoadTableWithDriver dropping `_timestamp` with a follow-up ALTER TABLE
+        // after the clone. Strip it so the leftover option does not disqualify
+        // CLONE in the strict-keys check below.
+        unset($exportOptions['dropTimestampColumn']);
 
         if ($tableInfo['isAlias'] && (empty($tableInfo['aliasColumnsAutoSync']) || !empty($tableInfo['aliasFilter']))) {
             return false;
