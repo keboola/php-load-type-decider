@@ -173,49 +173,58 @@ final class LoadTypeDecider
     ): void {
         $isWorkspaceBigQuery = $workspaceType === self::WORKSPACE_TYPE_BIGQUERY;
         $isBackendMismatch = $tableInfo['bucket']['backend'] !== $workspaceType;
+        // `dropTimestampColumn` is CLONE-compatible on both backends (see canClone(), which strips it
+        // before its strict-keys check). Strip it here too so this preflight stays consistent: a caller
+        // following the documented order (checkViableLoadMethod() -> canClone()) must not have a BigQuery
+        // clone load carrying `dropTimestampColumn` rejected here as an unsupported filtering option.
+        unset($exportOptions['dropTimestampColumn']);
         $hasOtherThanOverwriteOptions = $exportOptions && array_keys($exportOptions) !== ['overwrite'];
         $tableId = $tableInfo['id'];
 
-        if ($isWorkspaceBigQuery) {
-            if ($isBackendMismatch) {
-                throw new InvalidInputException(sprintf(
-                    'Workspace type "%s" does not match table backend type "%s" when loading BigQuery table "%s".',
-                    $workspaceType,
-                    $tableInfo['bucket']['backend'],
-                    $tableId,
-                ));
-            }
+        if (!$isWorkspaceBigQuery) {
+            return;
+        }
 
-            if ($hasOtherThanOverwriteOptions) {
-                throw new InvalidInputException(sprintf(
-                    'Option "%s" is not supported when loading BigQuery table "%s".',
-                    implode(', ', array_diff(array_keys($exportOptions), ['overwrite'])),
-                    $tableId,
-                ));
-            }
+        if ($isBackendMismatch) {
+            throw new InvalidInputException(sprintf(
+                'Workspace type "%s" does not match table backend type "%s" when loading BigQuery table "%s".',
+                $workspaceType,
+                $tableInfo['bucket']['backend'],
+                $tableId,
+            ));
+        }
 
-            /* isAlias means that the table is EITHER an alias OR a table shared from a different project.
-                Surprisingly, the table shared from different project IS supported, but the alias is not.
-                We tell them apart via sourceTable.project.id; the contract requires it when isAlias is true,
-                so fail fast when it is missing rather than silently allowing a possibly-unsupported alias.
-                https://keboolaglobal.slack.com/archives/C055HSMKX51/p1699434828910109
-            */
-            if ($tableInfo['isAlias']) {
-                if (!isset($tableInfo['sourceTable']['project']['id'])) {
-                    throw new InvalidInputException(sprintf(
-                        'Table "%s" is an alias but does not carry "sourceTable.project.id", so a local alias '
-                        . 'cannot be distinguished from a cross-project shared table for a BigQuery load.',
-                        $tableId,
-                    ));
-                }
+        if ($hasOtherThanOverwriteOptions) {
+            throw new InvalidInputException(sprintf(
+                'Option "%s" is not supported when loading BigQuery table "%s".',
+                implode(', ', array_diff(array_keys($exportOptions), ['overwrite'])),
+                $tableId,
+            ));
+        }
 
-                if ((string) $tableInfo['sourceTable']['project']['id'] === $currentProjectId) {
-                    throw new InvalidInputException(sprintf(
-                        'Table "%s" is an alias, which is not supported when loading BigQuery tables.',
-                        $tableId,
-                    ));
-                }
-            }
+        /* isAlias means that the table is EITHER an alias OR a table shared from a different project.
+            Surprisingly, the table shared from different project IS supported, but the alias is not.
+            We tell them apart via sourceTable.project.id; the contract requires it when isAlias is true,
+            so fail fast when it is missing rather than silently allowing a possibly-unsupported alias.
+            https://keboolaglobal.slack.com/archives/C055HSMKX51/p1699434828910109
+        */
+        if (!$tableInfo['isAlias']) {
+            return;
+        }
+
+        if (!isset($tableInfo['sourceTable']['project']['id'])) {
+            throw new InvalidInputException(sprintf(
+                'Table "%s" is an alias but does not carry "sourceTable.project.id", so a local alias '
+                . 'cannot be distinguished from a cross-project shared table for a BigQuery load.',
+                $tableId,
+            ));
+        }
+
+        if ((string) $tableInfo['sourceTable']['project']['id'] === $currentProjectId) {
+            throw new InvalidInputException(sprintf(
+                'Table "%s" is an alias, which is not supported when loading BigQuery tables.',
+                $tableId,
+            ));
         }
     }
 
@@ -225,14 +234,12 @@ final class LoadTypeDecider
      */
     public static function canClone(array $tableInfo, string $workspaceType, array $exportOptions): bool
     {
-        // `dropTimestampColumn` is honored by Snowflake's CLONE job
-        // (WorkspaceLoadCloneJob, Snowflake-only) — strip it so it does not block
-        // CLONE there. On BigQuery the CLONE path never consumes the option, so
-        // leaving it in the bag (below) correctly disqualifies CLONE and the load
-        // falls back to COPY (which has no `_timestamp`).
-        if ($workspaceType === self::WORKSPACE_TYPE_SNOWFLAKE) {
-            unset($exportOptions['dropTimestampColumn']);
-        }
+        // `dropTimestampColumn` is honored by the CLONE path on both supported
+        // backends — Snowflake via WorkspaceLoadCloneJob, BigQuery via
+        // LoadTableWithDriver dropping `_timestamp` with a follow-up ALTER TABLE
+        // after the clone. Strip it so the leftover option does not disqualify
+        // CLONE in the strict-keys check below.
+        unset($exportOptions['dropTimestampColumn']);
 
         if ($tableInfo['isAlias'] && (empty($tableInfo['aliasColumnsAutoSync']) || !empty($tableInfo['aliasFilter']))) {
             return false;
