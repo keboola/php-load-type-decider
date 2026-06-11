@@ -241,6 +241,22 @@ final class LoadTypeDecider
         // CLONE in the strict-keys check below.
         unset($exportOptions['dropTimestampColumn']);
 
+        // An empty `columns`/`column_types` does not project the table — it means "load
+        // every column", which a CLONE (a whole-table copy) does — so it must not disqualify
+        // CLONE in the strict-keys check below. The input-mapping-load runner forwards the
+        // component config verbatim, so these keys arrive even when nothing is projected. A
+        // table always has columns, so `null`, `[]`, and an absent key are equivalent and are
+        // all stripped. Any NON-empty value is a real projection and is left in place to
+        // (correctly) block CLONE — we do not compare it against the table's column set: the
+        // runner never sends a full-column list, so that case is not worth the complexity.
+        foreach (['columns', 'column_types'] as $columnsKey) {
+            if (array_key_exists($columnsKey, $exportOptions)
+                && ($exportOptions[$columnsKey] === null || $exportOptions[$columnsKey] === [])
+            ) {
+                unset($exportOptions[$columnsKey]);
+            }
+        }
+
         if ($tableInfo['isAlias'] && (empty($tableInfo['aliasColumnsAutoSync']) || !empty($tableInfo['aliasFilter']))) {
             return false;
         }

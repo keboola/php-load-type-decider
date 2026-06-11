@@ -321,6 +321,107 @@ final class LoadTypeDeciderTest extends TestCase
             ['overwrite' => false, 'dropTimestampColumn' => true],
             true,
         ];
+
+        // An empty `columns`/`column_types` list is no projection at all (whole table),
+        // so it must not disqualify CLONE — even when the source column list is unknown.
+        yield 'bigquery empty columns: CLONE allowed' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false, 'columns' => []],
+            true,
+        ];
+        yield 'snowflake empty columns: CLONE allowed' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'snowflake'],
+                'isAlias' => false,
+            ],
+            'snowflake',
+            ['overwrite' => false, 'columns' => []],
+            true,
+        ];
+
+        // `columns: null` / `column_types: null` == absent == empty: a table always has
+        // columns, so a null projection means "load every column" — clone-compatible.
+        yield 'bigquery null columns: CLONE allowed' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false, 'columns' => null],
+            true,
+        ];
+        yield 'bigquery null column_types: CLONE allowed' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false, 'column_types' => null],
+            true,
+        ];
+
+        // The `column_types` key is handled identically to `columns`: empty/null is a no-op.
+        yield 'bigquery empty column_types: CLONE allowed' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false, 'column_types' => []],
+            true,
+        ];
+
+        // Any NON-empty `columns` is a real projection and blocks CLONE (falls back to
+        // COPY). We do NOT compare against the table's column set — the runner never sends
+        // a full-column list, so a full list is not worth special-casing.
+        yield 'bigquery non-empty columns: CLONE blocked' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false, 'columns' => ['a', 'b']],
+            false,
+        ];
+        yield 'snowflake non-empty columns: CLONE blocked' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'snowflake'],
+                'isAlias' => false,
+            ],
+            'snowflake',
+            ['overwrite' => false, 'columns' => ['a']],
+            false,
+        ];
+        // Any NON-empty `column_types` likewise blocks CLONE.
+        yield 'bigquery non-empty column_types: CLONE blocked' => [
+            [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'bigquery',
+            ['overwrite' => false, 'column_types' => [['source' => 'a']]],
+            false,
+        ];
     }
 
     /**
