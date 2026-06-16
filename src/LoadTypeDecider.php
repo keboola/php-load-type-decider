@@ -91,9 +91,12 @@ final class LoadTypeDecider
         }
 
         // A VIEW reflects the whole source table, so it must not be auto-preferred
-        // for a request carrying filtering options it would silently drop. The
-        // only option a full BigQuery load legitimately carries is `overwrite`.
-        $isFullLoad = array_diff(array_keys($exportOptions), ['overwrite']) === [];
+        // for a request carrying filtering options it would silently drop. A full
+        // load carries only `overwrite` and/or `dropTimestampColumn` — the latter is
+        // a CLONE-compatible / VIEW-ignored transform (emitted from the IM
+        // `keep_internal_timestamp_column=false` default the runner forwards), NOT a
+        // row/column filter, so it must not disqualify the VIEW preference.
+        $isFullLoad = array_diff(array_keys($exportOptions), ['overwrite', 'dropTimestampColumn']) === [];
 
         // Preference order (both backends): CLONE -> VIEW -> COPY, i.e. a viable VIEW
         // always beats COPY for a full load. The `bigquery-default-im-view` feature
