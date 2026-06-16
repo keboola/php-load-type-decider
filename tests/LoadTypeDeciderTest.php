@@ -909,6 +909,35 @@ final class LoadTypeDeciderTest extends TestCase
             'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
         ];
 
+        // `dropTimestampColumn` (emitted from the IM `keep_internal_timestamp_column=false`
+        // DEFAULT the runner forwards) is a CLONE-compatible / VIEW-ignored transform, NOT a
+        // row/column filter, so it must not break full-load detection. A linked bucket carrying
+        // it is still a full load -> VIEW beats COPY. Regression guard for the most common payload.
+        yield 'bigquery linked bucket + dropTimestampColumn: VIEW preferred (still a full load)' => [
+            'tableInfo' => [
+                'id' => 'in.c-linked.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'isLinked' => true],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['overwrite' => false, 'dropTimestampColumn' => true],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::VIEW,
+            'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+
+        // Same option on the feature-ON path: a regular BQ full load with dropTimestampColumn
+        // must still resolve to VIEW (the option does not make it "filtered").
+        yield 'bigquery regular + dropTimestampColumn, default-im-view ON: VIEW preferred' => [
+            'tableInfo' => $bigqueryTable,
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['overwrite' => false, 'dropTimestampColumn' => true],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: true, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::VIEW,
+            'expectedPossible' => [LoadType::COPY, LoadType::CLONE, LoadType::VIEW],
+        ];
+
         // A filtered load keeps COPY even though VIEW is viable: a VIEW reflects the
         // whole source table and would silently drop the filter. This is the single
         // exception to "VIEW beats COPY".
