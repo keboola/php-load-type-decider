@@ -860,9 +860,9 @@ final class LoadTypeDeciderTest extends TestCase
         ];
 
         // External-schema Snowflake bucket: CLONE blocked, VIEW viable when the
-        // read-only-storage feature is on. VIEW is never the Snowflake default,
-        // so the preference is COPY.
-        yield 'snowflake external bucket, RO-storage ON: VIEW possible, COPY preferred' => [
+        // read-only-storage feature is on. VIEW always beats COPY for a full load
+        // (CLONE -> VIEW -> COPY), so with CLONE impossible the preference is VIEW.
+        yield 'snowflake external bucket, RO-storage ON: VIEW preferred over COPY (CLONE blocked)' => [
             'tableInfo' => [
                 'id' => 'in.c-ext.bar',
                 'name' => 'bar',
@@ -872,6 +872,56 @@ final class LoadTypeDeciderTest extends TestCase
             'workspaceType' => 'snowflake',
             'exportOptions' => ['overwrite' => false],
             'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: true),
+            'expectedPreferred' => LoadType::VIEW,
+            'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+
+        // BigQuery linked bucket: CLONE is impossible (BQ refuses CLONE on
+        // Analytics-Hub-linked datasets). VIEW always beats COPY for a full load,
+        // so even with the default-im-view flag OFF the preference is VIEW.
+        yield 'bigquery linked bucket, default-im-view OFF: VIEW preferred over COPY (CLONE blocked)' => [
+            'tableInfo' => [
+                'id' => 'in.c-linked.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'isLinked' => true],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::VIEW,
+            'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+
+        // BigQuery external-schema bucket, flag OFF: CLONE blocked, VIEW viable ->
+        // VIEW preferred over COPY (the flag only flips VIEW ahead of CLONE).
+        yield 'bigquery external bucket, default-im-view OFF: VIEW preferred over COPY (CLONE blocked)' => [
+            'tableInfo' => [
+                'id' => 'in.c-ext.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'hasExternalSchema' => true],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['overwrite' => false],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::VIEW,
+            'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+
+        // A filtered load keeps COPY even though VIEW is viable: a VIEW reflects the
+        // whole source table and would silently drop the filter. This is the single
+        // exception to "VIEW beats COPY".
+        yield 'bigquery linked bucket, filtered: COPY preferred (VIEW would drop the filter)' => [
+            'tableInfo' => [
+                'id' => 'in.c-linked.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'isLinked' => true],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => ['changed_since' => '-1 day'],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
             'expectedPreferred' => LoadType::COPY,
             'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
         ];
