@@ -39,19 +39,18 @@ final class LoadTypeDecider
      * override). It never reads features from a database — every feature gate is
      * supplied via {@see LoadTypeDeciderFeatures}.
      *
-     * Preference rules:
-     *   - BigQuery with `bigqueryDefaultImView` on, for a full load (no
-     *     filtering options) where VIEW is viable -> VIEW. Lets a project default
-     *     IM loads to a live VIEW instead of a snapshot.
-     *   - otherwise CLONE when viable (zero-copy, identical row semantics).
-     *   - otherwise COPY (always available).
+     * Preference order (both backends): CLONE -> VIEW -> COPY. A viable VIEW always
+     * beats COPY; CLONE (zero-copy, identical row semantics) is preferred over VIEW
+     * by default. The `bigqueryDefaultImView` feature flips VIEW ahead of CLONE
+     * (VIEW -> CLONE -> COPY) and is BigQuery-only. COPY is always available and is
+     * the final fallback.
      *
-     * VIEW is only auto-preferred for BigQuery behind the feature, and only for a
-     * full load: a VIEW reflects the whole source table and cannot honor
-     * filters / columns / time-windows, so auto-promoting a filtered request to
-     * VIEW would silently drop the filter. Such requests fall through to COPY.
-     * For every other backend VIEW stays a manual, opt-in choice and never
-     * becomes the preference even when it is in `possible`.
+     * VIEW is only auto-preferred for a full load: a VIEW reflects the whole source
+     * table and cannot honor filters / columns / time-windows, so auto-promoting a
+     * filtered request to VIEW would silently drop the filter. A filtered request
+     * therefore falls through to COPY (CLONE is already disqualified by the filter).
+     * VIEW always stays in `possible` when viable, so a UI can still offer it as an
+     * explicit, filter-dropping manual choice.
      *
      * @param StorageTableInfo $tableInfo     Storage API table detail (see {@see canClone()}).
      * @param string               $workspaceType Target workspace backend.
@@ -92,10 +91,18 @@ final class LoadTypeDecider
         }
 
         // A VIEW reflects the whole source table, so it must not be auto-preferred
-        // for a request carrying filtering options it would silently drop. The
-        // only option a full BigQuery load legitimately carries is `overwrite`.
-        $isFullLoad = array_diff(array_keys($exportOptions), ['overwrite']) === [];
+        // for a request carrying filtering options it would silently drop. A full
+        // load carries only `overwrite` and/or `dropTimestampColumn` — the latter is
+        // a CLONE-compatible / VIEW-ignored transform (emitted from the IM
+        // `keep_internal_timestamp_column=false` default the runner forwards), NOT a
+        // row/column filter, so it must not disqualify the VIEW preference.
+        $isFullLoad = array_diff(array_keys($exportOptions), ['overwrite', 'dropTimestampColumn']) === [];
 
+        // Preference order (both backends): CLONE -> VIEW -> COPY, i.e. a viable VIEW
+        // always beats COPY for a full load. The `bigquery-default-im-view` feature
+        // flips VIEW ahead of CLONE (VIEW -> CLONE -> COPY) and is BigQuery-only.
+        // A filtered load is never auto-promoted to VIEW (it would drop the filter),
+        // so it falls through to CLONE (already disqualified by the filter) / COPY.
         if ($workspaceType === self::WORKSPACE_TYPE_BIGQUERY
             && $features->bigqueryDefaultImView
             && $canView
@@ -104,6 +111,8 @@ final class LoadTypeDecider
             $preferred = LoadType::VIEW;
         } elseif ($canClone) {
             $preferred = LoadType::CLONE;
+        } elseif ($canView && $isFullLoad) {
+            $preferred = LoadType::VIEW;
         } else {
             $preferred = LoadType::COPY;
         }
