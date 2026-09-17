@@ -238,6 +238,13 @@ final class LoadTypeDecider
     }
 
     /**
+     * This answers a caller who left the load type open. A caller who pins `loadType: clone` never
+     * reaches here, so connection repeats the alias rule below in
+     * `LoadOperationParamsProcessor::isClonableSource()` and refuses there. **Keep the two in
+     * step:** a new non-clonable shape added here, a relaxed `aliasColumns` rule, or an alias
+     * filter that does not set `whereColumn` all pass that guard and clone the alias's source table
+     * in full into a workspace.
+     *
      * @param StorageTableInfo $tableInfo
      * @param array<string, mixed> $exportOptions
      */
