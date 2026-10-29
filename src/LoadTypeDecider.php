@@ -187,6 +187,8 @@ final class LoadTypeDecider
         // following the documented order (checkViableLoadMethod() -> canClone()) must not have a BigQuery
         // clone load carrying `dropTimestampColumn` rejected here as an unsupported filtering option.
         unset($exportOptions['dropTimestampColumn']);
+        // Descriptions are applied after cloning and do not project columns.
+        unset($exportOptions['description'], $exportOptions['columnDescriptions']);
         $hasOtherThanOverwriteOptions = $exportOptions && array_keys($exportOptions) !== ['overwrite'];
         $tableId = $tableInfo['id'];
 
