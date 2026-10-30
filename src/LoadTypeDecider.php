@@ -96,7 +96,10 @@ final class LoadTypeDecider
         // a CLONE-compatible / VIEW-ignored transform (emitted from the IM
         // `keep_internal_timestamp_column=false` default the runner forwards), NOT a
         // row/column filter, so it must not disqualify the VIEW preference.
-        $isFullLoad = array_diff(array_keys($exportOptions), ['overwrite', 'dropTimestampColumn']) === [];
+        $isFullLoad = array_diff(
+            array_keys($exportOptions),
+            ['overwrite', 'dropTimestampColumn', 'description', 'columnDescriptions'],
+        ) === [];
 
         // Preference order (both backends): CLONE -> VIEW -> COPY, i.e. a viable VIEW
         // always beats COPY for a full load. The `bigquery-default-im-view` feature
@@ -258,6 +261,8 @@ final class LoadTypeDecider
         // after the clone. Strip it so the leftover option does not disqualify
         // CLONE in the strict-keys check below.
         unset($exportOptions['dropTimestampColumn']);
+        // Descriptions are applied after cloning and do not project columns.
+        unset($exportOptions['description'], $exportOptions['columnDescriptions']);
 
         // An empty `columns`/`column_types` does not project the table — it means "load
         // every column", which a CLONE (a whole-table copy) does — so it must not disqualify
