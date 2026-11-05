@@ -321,6 +321,19 @@ final class LoadTypeDeciderTest extends TestCase
             ['overwrite' => false, 'dropTimestampColumn' => true],
             true,
         ];
+        foreach (['snowflake', 'bigquery'] as $backend) {
+            yield $backend . ' descriptions: CLONE allowed' => [
+                [
+                    'id' => 'foo.bar',
+                    'name' => 'bar',
+                    'bucket' => ['backend' => $backend],
+                    'isAlias' => false,
+                ],
+                $backend,
+                ['overwrite' => false, 'description' => 'Table', 'columnDescriptions' => ['id' => 'Identifier']],
+                true,
+            ];
+        }
 
         // An empty `columns`/`column_types` list is no projection at all (whole table),
         // so it must not disqualify CLONE — even when the source column list is unknown.
@@ -742,6 +755,20 @@ final class LoadTypeDeciderTest extends TestCase
                 'dropTimestampColumn' => true,
             ],
         ];
+
+        yield 'BigQuery descriptions are not an unsupported option' => [
+            'tableInfo' => [
+                'id' => 'foo.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery'],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'overwrite' => true,
+                'description' => 'Table', 'columnDescriptions' => ['id' => 'Identifier'],
+            ],
+        ];
     }
 
     /**
@@ -925,6 +952,35 @@ final class LoadTypeDeciderTest extends TestCase
             'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
             'expectedPreferred' => LoadType::VIEW,
             'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+        yield 'bigquery linked bucket + descriptions: VIEW preferred (still a full load)' => [
+            'tableInfo' => [
+                'id' => 'in.c-linked.bar',
+                'name' => 'bar',
+                'bucket' => ['backend' => 'bigquery', 'isLinked' => true],
+                'isAlias' => false,
+            ],
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'overwrite' => false,
+                'description' => 'Table',
+                'columnDescriptions' => ['id' => 'Identifier'],
+            ],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::VIEW,
+            'expectedPossible' => [LoadType::COPY, LoadType::VIEW],
+        ];
+        yield 'bigquery regular + descriptions, default-im-view OFF: CLONE preferred' => [
+            'tableInfo' => $bigqueryTable,
+            'workspaceType' => 'bigquery',
+            'exportOptions' => [
+                'overwrite' => false,
+                'description' => 'Table',
+                'columnDescriptions' => ['id' => 'Identifier'],
+            ],
+            'features' => new LoadTypeDeciderFeatures(bigqueryDefaultImView: false, snowflakeReadOnlyStorage: false),
+            'expectedPreferred' => LoadType::CLONE,
+            'expectedPossible' => [LoadType::COPY, LoadType::CLONE, LoadType::VIEW],
         ];
 
         // Same option on the feature-ON path: a regular BQ full load with dropTimestampColumn
